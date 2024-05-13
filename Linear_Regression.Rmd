@@ -1,0 +1,112 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#install relevant packages
+#install.packages("lm.beta")
+#install.packages("olsrr")
+#install.packages("tidyverse")
+#install.packages("car")
+
+
+#load packages into library
+library(tidyverse) 
+library(lm.beta)
+library(olsrr)
+library(car)
+library(ggplot2)
+
+#set wd, auto set to desktop
+
+#load csv
+credit <- read.csv("credit.csv")
+view(credit)
+
+#recode categorical variables as factors, with labels
+credit$Student <- factor(credit$Student, levels = c(0,1), labels = c("No", "Yes"))
+credit$Gender <- factor(credit$Gender, levels = c(0,1), labels = c("Male", "Female"))
+credit$Married <- factor(credit$Married, levels = c(0,1), labels = c("No", "Yes"))
+
+#check df for na values
+sum(is.na(credit))
+
+#summary statistics for df
+summary(credit)
+
+#partition the dataset into a training and validation set
+set.seed(42)
+sample <- sample(c(TRUE, FALSE), nrow(credit), replace = TRUE, prob = c(0.5, 0.5))
+traincred <- credit[sample, ]
+validcredit <- credit[!sample, ]
+
+#create a correlation matrix using quant variable from the training subset
+cor(traincred[c(1, 2, 3, 4, 5, 9)])
+
+#removes scientific notation
+options(scipen = 999)
+
+#create a multiple regression with balance as the predicted variable
+credit_MR <- lm(Balance ~ Income + Limit + Rating + Age + Education + Student + Gender + Married, data = traincred)
+summary(credit_MR)
+
+#calculate the Variance Inflation Factor to check for multicollinearity
+vif(credit_MR)
+
+#run a new multiple regression, taking out the linked variable of limit
+credit_MR2 <- lm(Balance ~ Income + Rating + Age + Gender + Rating + Married + Student, data = traincred)
+summary(credit_MR2)
+
+#create a residual plot of credit_MR2
+
+#create predicted values using the regression above
+credpred <- predict(credit_MR2)
+
+#create residual values as well for regression above
+credres <- resid(credit_MR2)
+
+#create a dataframe of the predicted and redisual values
+cred_pred_res_df <- data.frame(credpred, credres)
+
+#plot the predicted values against the residual values
+ggplot(data = cred_pred_res_df, mapping = aes(x = credpred, y = credres)) +
+  geom_point() +
+  labs(title = "Plot of predicted versus residual values", x = "Predicted", y = "Residual")
+
+#create a normal probabilty plot
+
+#create a vector with standardized residuals using the aforementioned multiple regression
+cred_stres <- rstandard(credit_MR2)
+
+#Plot the created standardized residuals to form a normalized plot
+qqnorm(cred_stres, ylab = "standardized residuals", xlab = "normal score")
+
+#view the regression output
+summary(credit_MR2)
+
+#create a new multiple regression analysis using the training dataframe and the variables that are statisticallly significant
+credit_MR3 <- lm(Balance ~ Income + Rating + Age + Student, data = traincred)
+summary(credit_MR3)
+
+#conduct one more multiple regression analysis using the validation dataframe 
+credit_MR_valid <- lm(Balance ~ Income + Rating + Age + Student, data = validcredit)
+summary(credit_MR_valid)
+
+#standardized regression coefficients for the validations set
+lm.beta(credit_MR3)
+
+#read the csv for the predictions
+cc_pred <- read.csv("credit_card_prediction.csv")
+view(cc_pred)
+
+#convert categorical data into factors
+cc_pred$Student <- factor(cc_pred$Student, levels=c(0,1), labels=c("No","Yes"))
+
+#predict with a 95% confidenct interval the balance of these cardholders
+predict(credit_MR_valid, cc_pred, interval = "prediction", level = 0.95)
+
+```
+
